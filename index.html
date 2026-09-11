@@ -84,6 +84,7 @@
 
   <header>
     <h1>⏱ Interval Timer</h1>
+    <button class="icon-btn" id="soundModeBtn" title="Cue sound">🔊</button>
   </header>
 
   <div class="tabs" id="mainTabs">
@@ -393,6 +394,46 @@ function beep(freq=880, dur=0.12){
 }
 function vibrate(pattern){ if(navigator.vibrate) navigator.vibrate(pattern); }
 
+/* ---------- Sound mode: 'voice' | 'beep' | 'off' ---------- */
+let soundMode = localStorage.getItem('hiit_sound_mode') || 'voice';
+const soundModeBtn = document.getElementById('soundModeBtn');
+function updateSoundModeBtn(){
+  soundModeBtn.textContent = soundMode==='voice' ? '🗣️' : (soundMode==='beep' ? '🔊' : '🔇');
+  soundModeBtn.title = 'Cue sound: ' + soundMode;
+}
+soundModeBtn.addEventListener('click', ()=>{
+  soundMode = soundMode==='voice' ? 'beep' : (soundMode==='beep' ? 'off' : 'voice');
+  localStorage.setItem('hiit_sound_mode', soundMode);
+  updateSoundModeBtn();
+  if(soundMode==='voice') speak('Voice cues on');
+});
+updateSoundModeBtn();
+
+let voicesReady = false;
+if('speechSynthesis' in window){
+  speechSynthesis.onvoiceschanged = ()=>{ voicesReady = true; };
+}
+function speak(text){
+  if(soundMode !== 'voice') return;
+  try{
+    if(!('speechSynthesis' in window)) return beep(1046,0.18);
+    speechSynthesis.cancel(); // don't let announcements queue up / overlap
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    speechSynthesis.speak(utter);
+  }catch(e){ beep(1046,0.18); }
+}
+function announceTransition(text){
+  if(soundMode==='voice') speak(text);
+  else if(soundMode==='beep') beep(1046,0.18);
+}
+function announceCountdownTick(){
+  if(soundMode==='beep') beep(660,0.08);
+  // voice mode stays silent on the tick-tick-tick — the phase name at 0 is the cue
+  // off mode does nothing
+}
+
 let wakeLock = null;
 async function requestWakeLock(){
   try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
@@ -412,9 +453,9 @@ function tick(){
     goNextStep();
     return;
   }
-  if(player.remaining <= 3.05 && player.remaining > 2.05 && !player._beeped3){ player._beeped3=true; beep(660,0.08); }
-  if(player.remaining <= 2.05 && player.remaining > 1.05 && !player._beeped2){ player._beeped2=true; beep(660,0.08); }
-  if(player.remaining <= 1.05 && !player._beeped1){ player._beeped1=true; beep(660,0.08); }
+  if(player.remaining <= 3.05 && player.remaining > 2.05 && !player._beeped3){ player._beeped3=true; announceCountdownTick(); }
+  if(player.remaining <= 2.05 && player.remaining > 1.05 && !player._beeped2){ player._beeped2=true; announceCountdownTick(); }
+  if(player.remaining <= 1.05 && !player._beeped1){ player._beeped1=true; announceCountdownTick(); }
   updatePlayerUI();
   tickHandle = requestAnimationFrame(tick);
 }
@@ -425,9 +466,10 @@ function goNextStep(){
     finishTimer();
     return;
   }
-  beep(1046,0.18); vibrate([120,60,120]);
+  vibrate([120,60,120]);
   player.remaining = player.steps[player.idx].seconds;
   player._beeped3=player._beeped2=player._beeped1=false;
+  announceTransition(player.steps[player.idx].label);
   updatePlayerUI();
   tickHandle = requestAnimationFrame(tick);
 }
@@ -435,7 +477,8 @@ function goNextStep(){
 function finishTimer(){
   player.running = false;
   releaseWakeLock();
-  beep(1200,0.25); setTimeout(()=>beep(1500,0.3),200);
+  if(soundMode==='voice') speak('Workout complete. Great work.');
+  else if(soundMode==='beep'){ beep(1200,0.25); setTimeout(()=>beep(1500,0.3),200); }
   vibrate([200,100,200,100,300]);
   document.getElementById('pPhaseLabel').textContent = '🎉 Done!';
   document.getElementById('pTime').textContent = '';
@@ -446,9 +489,11 @@ function finishTimer(){
 document.getElementById('playPauseBtn').addEventListener('click', ()=>{
   if(!player) return;
   if(player.idx >= player.steps.length) return; // finished
+  const isFirstStart = !player.running && player.idx===0 && !player._started;
   player.running = !player.running;
   document.getElementById('playPauseBtn').textContent = player.running ? 'Pause' : 'Resume';
   if(player.running){
+    if(isFirstStart){ player._started = true; announceTransition(currentStep().label); }
     requestWakeLock();
     lastTick = performance.now();
     tickHandle = requestAnimationFrame(tick);
