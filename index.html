@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Interval HIIT Timer</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#101218">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#101218; --panel:#181b24; --panel2:#1f2330; --text:#f3f4f7; --muted:#9098a8;
+    --accent:#ff5a3c; --accent2:#3ca7ff; --work:#ff5a3c; --rest:#3ca7ff; --warm:#ffc23c; --cool:#5ad1a0;
+    --danger:#ff4d5e; --radius:18px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); overscroll-behavior:none; user-select:none;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+  }
+  #app{max-width:520px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column;}
+  header{padding:18px 18px 8px; display:flex; align-items:center; justify-content:space-between;}
+  header h1{font-size:20px; margin:0; letter-spacing:.3px;}
+  .tabs{display:flex; gap:8px; padding:0 18px 12px;}
+  .tab{flex:1; text-align:center; padding:10px 0; border-radius:12px; background:var(--panel); color:var(--muted); font-weight:600; font-size:14px; cursor:pointer;}
+  .tab.active{background:var(--accent); color:#fff;}
+  .screen{display:none; flex:1; flex-direction:column; padding:0 18px 24px; overflow-y:auto;}
+  .screen.active{display:flex;}
+
+  /* Preset list */
+  .preset-card{background:var(--panel); border-radius:var(--radius); padding:16px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .preset-card .info h3{margin:0 0 4px; font-size:16px;}
+  .preset-card .info p{margin:0; color:var(--muted); font-size:13px;}
+  .preset-card .actions{display:flex; gap:6px; flex-shrink:0;}
+  .icon-btn{background:var(--panel2); border:none; color:var(--text); width:36px; height:36px; border-radius:10px; font-size:16px; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .icon-btn.danger{color:var(--danger);}
+  .big-btn{background:var(--accent); color:#fff; border:none; border-radius:14px; padding:14px; font-size:16px; font-weight:700; cursor:pointer; width:100%;}
+  .ghost-btn{background:transparent; border:1.5px solid var(--panel2); color:var(--text); border-radius:14px; padding:12px; font-size:14px; font-weight:600; cursor:pointer;}
+  .section-label{color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin:18px 0 8px;}
+
+  /* Builder */
+  label{font-size:13px; color:var(--muted); display:block; margin-bottom:6px;}
+  input[type=text], input[type=number]{
+    width:100%; background:var(--panel2); border:none; color:var(--text); padding:12px; border-radius:10px; font-size:15px; margin-bottom:14px;
+  }
+  .row{display:flex; gap:10px;}
+  .row > div{flex:1;}
+  .phase-row{background:var(--panel); border-radius:14px; padding:12px; margin-bottom:10px; display:flex; gap:10px; align-items:center;}
+  .phase-row .swatch{width:14px; height:38px; border-radius:6px; flex-shrink:0;}
+  .phase-row input[type=text]{margin:0; flex:2;}
+  .phase-row input[type=number]{margin:0; flex:1;}
+  .phase-row .icon-btn{width:34px; height:34px;}
+  .colorpicker{display:flex; gap:8px; margin-bottom:6px;}
+  .swatch-opt{width:26px; height:26px; border-radius:50%; cursor:pointer; border:2px solid transparent;}
+  .swatch-opt.sel{border-color:#fff;}
+
+  /* Player */
+  #playerScreen{align-items:center; justify-content:flex-start; padding-top:10px;}
+  .round-info{color:var(--muted); font-size:14px; margin-bottom:6px;}
+  .phase-label{font-size:22px; font-weight:700; margin-bottom:18px; letter-spacing:.5px;}
+  .ring-wrap{position:relative; width:270px; height:270px; margin-bottom:22px;}
+  .ring-wrap svg{width:100%; height:100%; transform:rotate(-90deg);}
+  .ring-bg{fill:none; stroke:var(--panel2); stroke-width:14;}
+  .ring-fg{fill:none; stroke-width:14; stroke-linecap:round; transition:stroke-dashoffset .25s linear, stroke .3s;}
+  .ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .ring-center .time{font-size:56px; font-weight:800; font-variant-numeric:tabular-nums;}
+  .ring-center .next{color:var(--muted); font-size:13px; margin-top:4px;}
+  .player-controls{display:flex; gap:14px; width:100%; margin-top:8px;}
+  .player-controls button{flex:1;}
+  .round-track{display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap; justify-content:center;}
+  .round-dot{width:8px; height:8px; border-radius:50%; background:var(--panel2);}
+  .round-dot.done{background:var(--muted);}
+  .round-dot.current{background:var(--accent);}
+  .timer-name{font-size:15px; color:var(--muted); margin-bottom:2px;}
+  .backlink{background:none; border:none; color:var(--muted); font-size:14px; margin-bottom:8px; align-self:flex-start; cursor:pointer; padding:4px 0;}
+  .finished-badge{font-size:40px; margin-bottom:10px;}
+  .empty-state{color:var(--muted); text-align:center; padding:40px 10px; font-size:14px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>⏱ Interval Timer</h1>
+  </header>
+
+  <div class="tabs" id="mainTabs">
+    <div class="tab active" data-tab="presets">Presets</div>
+    <div class="tab" data-tab="builder">Builder</div>
+  </div>
+
+  <!-- PRESETS SCREEN -->
+  <div class="screen active" id="presetsScreen">
+    <div class="section-label">Built-in</div>
+    <div id="builtinList"></div>
+    <div class="section-label">My Timers</div>
+    <div id="customList"></div>
+  </div>
+
+  <!-- BUILDER SCREEN -->
+  <div class="screen" id="builderScreen">
+    <label>Timer name</label>
+    <input type="text" id="bName" placeholder="e.g. Leg Day HIIT">
+
+    <div class="row">
+      <div>
+        <label>Warm-up (sec, optional)</label>
+        <input type="number" id="bWarmup" min="0" value="0">
+      </div>
+      <div>
+        <label>Cool-down (sec, optional)</label>
+        <input type="number" id="bCooldown" min="0" value="0">
+      </div>
+    </div>
+
+    <label>Rounds (times the phases below repeat)</label>
+    <input type="number" id="bRounds" min="1" value="8">
+
+    <div class="section-label">Phases (repeated each round)</div>
+    <div id="phaseList"></div>
+    <button class="ghost-btn" id="addPhaseBtn" style="margin-bottom:16px;">+ Add phase</button>
+
+    <button class="big-btn" id="saveTimerBtn">Save Timer</button>
+  </div>
+
+  <!-- PLAYER SCREEN -->
+  <div class="screen" id="playerScreen">
+    <button class="backlink" id="backBtn">‹ Back</button>
+    <div class="timer-name" id="pName"></div>
+    <div class="round-info" id="pRoundInfo"></div>
+    <div class="round-track" id="pRoundTrack"></div>
+    <div class="phase-label" id="pPhaseLabel">Ready</div>
+    <div class="ring-wrap">
+      <svg viewBox="0 0 200 200">
+        <circle class="ring-bg" cx="100" cy="100" r="90"></circle>
+        <circle class="ring-fg" id="ringFg" cx="100" cy="100" r="90"></circle>
+      </svg>
+      <div class="ring-center">
+        <div class="time" id="pTime">--</div>
+        <div class="next" id="pNext"></div>
+      </div>
+    </div>
+    <div class="player-controls">
+      <button class="ghost-btn" id="resetBtn">Reset</button>
+      <button class="big-btn" id="playPauseBtn">Start</button>
+      <button class="ghost-btn" id="skipBtn">Skip ▶</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ---------- Data ---------- */
+const COLORS = ['#ff5a3c','#3ca7ff','#ffc23c','#5ad1a0','#c583ff','#ff85b3'];
+
+const BUILTIN_PRESETS = [
+  { id:'b_tabata', name:'Classic Tabata', warmup:10, cooldown:0, rounds:8,
+    phases:[{label:'Work',seconds:20,color:'#ff5a3c'},{label:'Rest',seconds:10,color:'#3ca7ff'}] },
+  { id:'b_3030', name:'30/30 HIIT', warmup:15, cooldown:15, rounds:10,
+    phases:[{label:'Work',seconds:30,color:'#ff5a3c'},{label:'Rest',seconds:30,color:'#3ca7ff'}] },
+  { id:'b_emom', name:'EMOM 10', warmup:0, cooldown:0, rounds:10,
+    phases:[{label:'Work',seconds:60,color:'#ff5a3c'}] },
+  { id:'b_beginner', name:'Beginner Interval', warmup:20, cooldown:20, rounds:6,
+    phases:[{label:'Work',seconds:20,color:'#ff5a3c'},{label:'Rest',seconds:40,color:'#3ca7ff'}] },
+];
+
+let customTimers = JSON.parse(localStorage.getItem('hiit_custom_timers') || '[]');
+let editingPhases = [];
+let activeTimer = null;
+let player = null; // {steps:[{label,seconds,color,round}], idx, remaining, running, total}
+let tickHandle = null;
+let audioCtx = null;
+
+function saveCustom(){ localStorage.setItem('hiit_custom_timers', JSON.stringify(customTimers)); }
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('#mainTabs .tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('#mainTabs .tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    showScreen(t.dataset.tab === 'presets' ? 'presetsScreen' : 'builderScreen');
+  });
+});
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* ---------- Render preset lists ---------- */
+function renderPresets(){
+  const bList = document.getElementById('builtinList');
+  const cList = document.getElementById('customList');
+  bList.innerHTML = '';
+  cList.innerHTML = '';
+
+  BUILTIN_PRESETS.forEach(p => bList.appendChild(presetCard(p, false)));
+
+  if(customTimers.length === 0){
+    cList.innerHTML = '<div class="empty-state">No custom timers yet. Build one in the Builder tab.</div>';
+  } else {
+    customTimers.forEach(p => cList.appendChild(presetCard(p, true)));
+  }
+}
+
+function presetCard(p, editable){
+  const div = document.createElement('div');
+  div.className = 'preset-card';
+  const totalSec = timerTotalSeconds(p);
+  div.innerHTML = `
+    <div class="info">
+      <h3>${escapeHtml(p.name)}</h3>
+      <p>${p.rounds} rounds · ${p.phases.map(ph=>ph.label+' '+ph.seconds+'s').join(' / ')} · ~${Math.round(totalSec/60)} min</p>
+    </div>
+    <div class="actions">
+      ${editable ? '<button class="icon-btn edit-btn">✎</button><button class="icon-btn danger del-btn">🗑</button>' : ''}
+      <button class="icon-btn play-btn">▶</button>
+    </div>`;
+  div.querySelector('.play-btn').addEventListener('click', ()=> startTimer(p));
+  if(editable){
+    div.querySelector('.edit-btn').addEventListener('click', ()=> loadIntoBuilder(p));
+    div.querySelector('.del-btn').addEventListener('click', ()=>{
+      if(confirm('Delete "'+p.name+'"?')){
+        customTimers = customTimers.filter(t=>t.id!==p.id);
+        saveCustom(); renderPresets();
+      }
+    });
+  }
+  return div;
+}
+
+function timerTotalSeconds(p){
+  return p.warmup + p.cooldown + p.rounds * p.phases.reduce((a,ph)=>a+ph.seconds,0);
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- Builder ---------- */
+function newPhaseRow(label='Work', seconds=20, color=COLORS[0]){
+  return {label, seconds, color};
+}
+function resetBuilder(){
+  document.getElementById('bName').value = '';
+  document.getElementById('bWarmup').value = 0;
+  document.getElementById('bCooldown').value = 0;
+  document.getElementById('bRounds').value = 8;
+  editingPhases = [newPhaseRow('Work',20,'#ff5a3c'), newPhaseRow('Rest',10,'#3ca7ff')];
+  editingId = null;
+  renderPhaseList();
+}
+let editingId = null;
+
+function loadIntoBuilder(p){
+  document.getElementById('bName').value = p.name;
+  document.getElementById('bWarmup').value = p.warmup;
+  document.getElementById('bCooldown').value = p.cooldown;
+  document.getElementById('bRounds').value = p.rounds;
+  editingPhases = p.phases.map(ph=>({...ph}));
+  editingId = p.id;
+  document.querySelector('.tab[data-tab="builder"]').click();
+  renderPhaseList();
+}
+
+function renderPhaseList(){
+  const list = document.getElementById('phaseList');
+  list.innerHTML = '';
+  editingPhases.forEach((ph, i)=>{
+    const row = document.createElement('div');
+    row.className = 'phase-row';
+    row.innerHTML = `
+      <div class="swatch" style="background:${ph.color}"></div>
+      <input type="text" value="${escapeHtml(ph.label)}" data-i="${i}" class="ph-label">
+      <input type="number" min="1" value="${ph.seconds}" data-i="${i}" class="ph-sec">
+      <button class="icon-btn danger ph-del" data-i="${i}">✕</button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.ph-label').forEach(inp=>inp.addEventListener('input', e=>{
+    editingPhases[+e.target.dataset.i].label = e.target.value;
+  }));
+  list.querySelectorAll('.ph-sec').forEach(inp=>inp.addEventListener('input', e=>{
+    editingPhases[+e.target.dataset.i].seconds = Math.max(1, parseInt(e.target.value)||1);
+  }));
+  list.querySelectorAll('.ph-del').forEach(btn=>btn.addEventListener('click', e=>{
+    if(editingPhases.length<=1) return alert('A timer needs at least one phase.');
+    editingPhases.splice(+e.target.dataset.i,1);
+    renderPhaseList();
+  }));
+}
+
+document.getElementById('addPhaseBtn').addEventListener('click', ()=>{
+  const color = COLORS[editingPhases.length % COLORS.length];
+  editingPhases.push(newPhaseRow('Phase '+(editingPhases.length+1), 20, color));
+  renderPhaseList();
+});
+
+document.getElementById('saveTimerBtn').addEventListener('click', ()=>{
+  const name = document.getElementById('bName').value.trim() || 'My Timer';
+  const warmup = Math.max(0, parseInt(document.getElementById('bWarmup').value)||0);
+  const cooldown = Math.max(0, parseInt(document.getElementById('bCooldown').value)||0);
+  const rounds = Math.max(1, parseInt(document.getElementById('bRounds').value)||1);
+  if(editingPhases.length===0) return alert('Add at least one phase.');
+
+  const timer = { id: editingId || ('c_'+Date.now()), name, warmup, cooldown, rounds, phases: editingPhases.map(p=>({...p})) };
+  if(editingId){
+    const idx = customTimers.findIndex(t=>t.id===editingId);
+    if(idx>-1) customTimers[idx] = timer; else customTimers.push(timer);
+  } else {
+    customTimers.push(timer);
+  }
+  saveCustom();
+  resetBuilder();
+  document.querySelector('.tab[data-tab="presets"]').click();
+  renderPresets();
+});
+
+/* ---------- Player ---------- */
+function buildSteps(p){
+  const steps = [];
+  if(p.warmup > 0) steps.push({label:'Warm-up', seconds:p.warmup, color:'#ffc23c', round:0});
+  for(let r=1; r<=p.rounds; r++){
+    p.phases.forEach(ph => steps.push({label:ph.label, seconds:ph.seconds, color:ph.color, round:r}));
+  }
+  if(p.cooldown > 0) steps.push({label:'Cool-down', seconds:p.cooldown, color:'#5ad1a0', round:p.rounds+1});
+  return steps;
+}
+
+function startTimer(p){
+  activeTimer = p;
+  const steps = buildSteps(p);
+  player = { steps, idx:0, remaining:steps[0].seconds, running:false, rounds:p.rounds };
+  document.getElementById('pName').textContent = p.name;
+  document.getElementById('playPauseBtn').textContent = 'Start';
+  document.querySelectorAll('#mainTabs .tab').forEach(x=>x.classList.remove('active'));
+  showScreen('playerScreen');
+  renderRoundTrack();
+  updatePlayerUI();
+}
+
+function renderRoundTrack(){
+  const track = document.getElementById('pRoundTrack');
+  track.innerHTML = '';
+  for(let i=1;i<=player.rounds;i++){
+    const dot = document.createElement('div');
+    dot.className = 'round-dot';
+    dot.id = 'dot'+i;
+    track.appendChild(dot);
+  }
+}
+
+function currentStep(){ return player.steps[player.idx]; }
+
+function updatePlayerUI(){
+  const step = currentStep();
+  document.getElementById('pPhaseLabel').textContent = step.label;
+  document.getElementById('pTime').textContent = formatTime(player.remaining);
+  document.getElementById('pRoundInfo').textContent = step.round>0 ? `Round ${step.round} of ${player.rounds}` : (step.label);
+  const next = player.steps[player.idx+1];
+  document.getElementById('pNext').textContent = next ? 'Next: '+next.label : 'Last step';
+
+  const ring = document.getElementById('ringFg');
+  const circumference = 2*Math.PI*90;
+  ring.style.strokeDasharray = circumference;
+  const frac = step.seconds>0 ? player.remaining/step.seconds : 0;
+  ring.style.strokeDashoffset = circumference*(1-frac);
+  ring.style.stroke = step.color;
+
+  document.querySelectorAll('.round-dot').forEach((d,i)=>{
+    d.classList.remove('current','done');
+    const rn = i+1;
+    if(step.round>rn) d.classList.add('done');
+    else if(step.round===rn) d.classList.add('current');
+  });
+}
+
+function formatTime(s){
+  s = Math.max(0, Math.ceil(s));
+  const m = Math.floor(s/60), sec = s%60;
+  return (m>0 ? m+':'+String(sec).padStart(2,'0') : String(sec));
+}
+
+function beep(freq=880, dur=0.12){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = freq;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+dur);
+    osc.start(); osc.stop(audioCtx.currentTime+dur);
+  }catch(e){}
+}
+function vibrate(pattern){ if(navigator.vibrate) navigator.vibrate(pattern); }
+
+let wakeLock = null;
+async function requestWakeLock(){
+  try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+function releaseWakeLock(){ if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; } }
+
+let lastTick = null;
+function tick(){
+  if(!player.running) return;
+  const now = performance.now();
+  const dt = (now - lastTick)/1000;
+  lastTick = now;
+  player.remaining -= dt;
+
+  if(player.remaining <= 0){
+    // countdown beep already handled below; move to next step
+    goNextStep();
+    return;
+  }
+  if(player.remaining <= 3.05 && player.remaining > 2.05 && !player._beeped3){ player._beeped3=true; beep(660,0.08); }
+  if(player.remaining <= 2.05 && player.remaining > 1.05 && !player._beeped2){ player._beeped2=true; beep(660,0.08); }
+  if(player.remaining <= 1.05 && !player._beeped1){ player._beeped1=true; beep(660,0.08); }
+  updatePlayerUI();
+  tickHandle = requestAnimationFrame(tick);
+}
+
+function goNextStep(){
+  player.idx++;
+  if(player.idx >= player.steps.length){
+    finishTimer();
+    return;
+  }
+  beep(1046,0.18); vibrate([120,60,120]);
+  player.remaining = player.steps[player.idx].seconds;
+  player._beeped3=player._beeped2=player._beeped1=false;
+  updatePlayerUI();
+  tickHandle = requestAnimationFrame(tick);
+}
+
+function finishTimer(){
+  player.running = false;
+  releaseWakeLock();
+  beep(1200,0.25); setTimeout(()=>beep(1500,0.3),200);
+  vibrate([200,100,200,100,300]);
+  document.getElementById('pPhaseLabel').textContent = '🎉 Done!';
+  document.getElementById('pTime').textContent = '';
+  document.getElementById('pNext').textContent = 'Great work.';
+  document.getElementById('playPauseBtn').textContent = 'Start';
+}
+
+document.getElementById('playPauseBtn').addEventListener('click', ()=>{
+  if(!player) return;
+  if(player.idx >= player.steps.length) return; // finished
+  player.running = !player.running;
+  document.getElementById('playPauseBtn').textContent = player.running ? 'Pause' : 'Resume';
+  if(player.running){
+    requestWakeLock();
+    lastTick = performance.now();
+    tickHandle = requestAnimationFrame(tick);
+  } else {
+    releaseWakeLock();
+    cancelAnimationFrame(tickHandle);
+  }
+});
+
+document.getElementById('skipBtn').addEventListener('click', ()=>{
+  if(!player) return;
+  cancelAnimationFrame(tickHandle);
+  goNextStep();
+  if(!player.running){ player.running=true; document.getElementById('playPauseBtn').textContent='Pause'; requestWakeLock(); lastTick=performance.now(); tickHandle=requestAnimationFrame(tick); }
+});
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  if(!activeTimer) return;
+  cancelAnimationFrame(tickHandle);
+  releaseWakeLock();
+  startTimer(activeTimer);
+});
+
+document.getElementById('backBtn').addEventListener('click', ()=>{
+  cancelAnimationFrame(tickHandle);
+  releaseWakeLock();
+  player = null;
+  document.querySelector('.tab[data-tab="presets"]').classList.add('active');
+  showScreen('presetsScreen');
+  renderPresets();
+});
+
+/* ---------- Service worker ---------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+/* ---------- Init ---------- */
+resetBuilder();
+renderPresets();
+</script>
+</body>
+</html>
